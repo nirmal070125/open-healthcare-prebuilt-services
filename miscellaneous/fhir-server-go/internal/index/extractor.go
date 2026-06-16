@@ -156,7 +156,11 @@ func DeleteWithPool(ctx context.Context, pool *pgxpool.Pool, resourceType, resou
 }
 
 func (e *Extractor) queueParam(batch *pgx.Batch, resourceType, resourceID string, resource map[string]any, d searchparam.Definition) {
-	vals, err := fhirpath.EvaluatePolymorphic(d.FHIRPath, resource)
+	// EvaluatePolymorphicCompiled is an allocation-light, compiled-and-cached
+	// drop-in for EvaluatePolymorphic on this ingest hot path; it returns
+	// identical values (falling back to the generic interpreter for the few
+	// expression shapes it does not fast-path).
+	vals, err := fhirpath.EvaluatePolymorphicCompiled(d.FHIRPath, resource)
 	if err != nil || len(vals) == 0 {
 		return
 	}
