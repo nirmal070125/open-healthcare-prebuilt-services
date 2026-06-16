@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	_ "net/http/pprof" // registers /debug/pprof handlers on http.DefaultServeMux (opt-in via PPROF_ADDR)
 	"os"
 	"os/signal"
 	"sync/atomic"
@@ -113,6 +114,19 @@ func run() error {
 	// Start listening before IGs are loaded so liveness probes pass immediately
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
+
+	// Optional pprof endpoint (opt-in; disabled unless PPROF_ADDR is set, so it
+	// never exposes profiling in production). Serves http.DefaultServeMux, where
+	// the net/http/pprof blank import registered the /debug/pprof handlers. Used
+	// by the benchmark harness to profile the ingest hot path.
+	if pprofAddr := os.Getenv("PPROF_ADDR"); pprofAddr != "" {
+		go func() {
+			slog.Info("pprof listening", "addr", pprofAddr)
+			if err := http.ListenAndServe(pprofAddr, nil); err != nil && err != http.ErrServerClosed {
+				slog.Warn("pprof server error", "err", err)
+			}
+		}()
+	}
 
 	go func() {
 		slog.Info("server listening", "addr", srv.Addr, "baseURL", cfg.BaseURL)
